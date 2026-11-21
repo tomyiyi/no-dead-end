@@ -60,6 +60,8 @@ isDeadEnd(text) = 命中拒答句式 AND 文本内零个可执行信号
 
 ## 3. 直接调用（脚本化，不靠记规则）
 
+本机安装路径：`~/.workbuddy/skills/no-dead-end/dist/src/cli.js`（装在别处就替换前缀）。
+
 ```bash
 # 判定一句话是不是死胡同（退出码 1 = 是）
 node <repo>/dist/src/cli.js check "这个话题目前不在我的能力覆盖范围内，我没有办法就此展开讨论。"
