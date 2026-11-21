@@ -172,28 +172,61 @@ function main(): number {
 
   if (command === 'install-hooks') {
     const dryRun = argv.includes('--dry-run');
-    const settingsPath = join(homedir(), '.gemini', 'settings.json');
-    if (!existsSync(settingsPath)) throw new Error(`找不到 ${settingsPath}`);
-
-    const settings = JSON.parse(readFileSync(settingsPath, 'utf8')) as Record<string, unknown>;
-    const hooks = (settings['hooks'] ?? {}) as Record<string, unknown>;
-    const after = Array.isArray(hooks['AfterAgent']) ? (hooks['AfterAgent'] as unknown[]) : [];
+    const hostIndex = argv.indexOf('--host');
+    const host = hostIndex >= 0 ? argv[hostIndex + 1] : 'antigravity';
     const commandLine = `node ${fileURLToPath(import.meta.url)} hook`;
 
-    const already = JSON.stringify(after).includes('no-dead-end') || JSON.stringify(after).includes(commandLine);
-    if (already) {
+    // Antigravity（agy）= PreToolUse / PostToolUse / Stop，配置在 ~/.gemini/config/hooks.json
+    // Gemini CLI = settings.json 里的 hooks.AfterAgent
+    const isAntigravity = host !== 'gemini';
+    const file = isAntigravity
+      ? join(homedir(), '.gemini', 'config', 'hooks.json')
+      : join(homedir(), '.gemini', 'settings.json');
+
+    const current = existsSync(file)
+      ? (JSON.parse(readFileSync(file, 'utf8')) as Record<string, unknown>)
+      : {};
+
+    if (isAntigravity) {
+      if (current['no-dead-end']) {
+        console.log(`${file} 里已有 no-dead-end 分组，跳过。`);
+        return 0;
+      }
+      const next = {
+        ...current,
+        'no-dead-end': {
+          Stop: [{ type: 'command', command: commandLine, timeout: 10 }],
+        },
+      };
+      if (dryRun) {
+        console.log(JSON.stringify(next['no-dead-end'], null, 2));
+        return 0;
+      }
+      const backup = existsSync(file)
+        ? `${file}.bak-${new Date().toISOString().slice(0, 19).replace(/[-:]/g, '')}`
+        : '';
+      if (backup) copyFileSync(file, backup);
+      const tmp = `${file}.tmp-${process.pid}`;
+      writeFileSync(tmp, `${JSON.stringify(next, null, 2)}\n`, 'utf8');
+      JSON.parse(readFileSync(tmp, 'utf8'));
+      renameSync(tmp, file);
+      console.log(`已写入 Stop hook：${file}`);
+      if (backup) console.log(`备份：${backup}`);
+      return 0;
+    }
+
+    const hooks = (current['hooks'] ?? {}) as Record<string, unknown>;
+    const after = Array.isArray(hooks['AfterAgent']) ? (hooks['AfterAgent'] as unknown[]) : [];
+    if (JSON.stringify(after).includes('no-dead-end') || JSON.stringify(after).includes(commandLine)) {
       console.log('hook 已存在，跳过。');
       return 0;
     }
 
     const next = {
-      ...settings,
+      ...current,
       hooks: {
         ...hooks,
-        AfterAgent: [
-          ...after,
-          { matcher: '*', hooks: [{ type: 'command', command: commandLine }] },
-        ],
+        AfterAgent: [...after, { matcher: '*', hooks: [{ type: 'command', command: commandLine }] }],
       },
     };
 
@@ -203,13 +236,12 @@ function main(): number {
       return 0;
     }
 
-    const backup = `${settingsPath}.bak-${new Date().toISOString().slice(0, 19).replace(/[-:]/g, '')}`;
-    copyFileSync(settingsPath, backup);
-    const tmp = `${settingsPath}.tmp-${process.pid}`;
+    const backup = `${file}.bak-${new Date().toISOString().slice(0, 19).replace(/[-:]/g, '')}`;
+    copyFileSync(file, backup);
+    const tmp = `${file}.tmp-${process.pid}`;
     writeFileSync(tmp, `${JSON.stringify(next, null, 2)}\n`, 'utf8');
-    JSON.parse(readFileSync(tmp, 'utf8'));
-    renameSync(tmp, settingsPath);
-    console.log(`已写入 AfterAgent hook：${settingsPath}`);
+    renameSync(tmp, file);
+    console.log(`已写入 AfterAgent hook：${file}`);
     console.log(`备份：${backup}`);
     return 0;
   }

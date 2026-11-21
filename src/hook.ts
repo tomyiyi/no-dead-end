@@ -1,4 +1,13 @@
+import { existsSync, readFileSync } from 'node:fs';
 import { isDeadEnd } from './detect.js';
+
+/** 这些键是元数据或用户输入，不是助手回复；扫进去会造成误判。 */
+const SKIP_KEYS = new RegExp(
+  '^(cwd|path|file|command|args|timestamp|session_id|transcript_path|tool_name|' +
+    'lastUserInput|transcriptPath|cwd|workspacePaths|artifactDirectoryPath|conversationId|' +
+    'modelName|hookEventName|terminationReason|error|continuationActive|fullyIdle|' +
+    'executionNum|artifactDirectoryPath)$',
+);
 
 /**
  * 把 hook 负载里所有像"回复内容"的字符串挖出来，逐个判定。
@@ -17,7 +26,7 @@ export function collectStrings(value: unknown, out: string[] = [], depth = 0): s
   if (typeof value === 'object') {
     for (const [key, item] of Object.entries(value as Record<string, unknown>)) {
       // 跳过明显不是回复内容的字段，减少误判
-      if (/^(cwd|path|file|command|args|timestamp|session_id|transcript_path|tool_name)$/.test(key)) continue;
+      if (SKIP_KEYS.test(key)) continue;
       collectStrings(item, out, depth + 1);
     }
   }
@@ -31,8 +40,47 @@ export type HookDecision = {
   nextAction?: string;
 };
 
+type TranscriptLine = {
+  source?: string;
+  type?: string;
+  content?: unknown;
+};
+
+/** 从 transcriptPath 指向的 JSONL 里取助手最近的消息文本（最多 5 条）。 */
+export function readTranscriptReplies(payload: unknown): string[] {
+  const path =
+    typeof payload === 'object' && payload !== null
+      ? (payload as Record<string, unknown>)['transcriptPath']
+      : undefined;
+  if (typeof path !== 'string' || !existsSync(path)) return [];
+
+  let lines: string[];
+  try {
+    lines = readFileSync(path, 'utf8').trim().split('\n');
+  } catch {
+    return [];
+  }
+
+  const replies: string[] = [];
+  for (const line of lines.slice(-12).reverse()) {
+    let entry: TranscriptLine;
+    try {
+      entry = JSON.parse(line) as TranscriptLine;
+    } catch {
+      continue;
+    }
+    if (entry.source !== 'MODEL') continue;
+    if (typeof entry.content !== 'string' || entry.content.trim().length < 6) continue;
+    replies.push(entry.content);
+    if (replies.length >= 5) break;
+  }
+  return replies;
+}
+
 export function evaluateHookPayload(payload: unknown): HookDecision {
-  const texts = collectStrings(payload);
+  // Antigravity 的 Stop 负载不带回复正文，只给 transcriptPath；优先从会话记录里取助手最后几条输出。
+  const replyTexts = readTranscriptReplies(payload);
+  const texts = replyTexts.length > 0 ? replyTexts : collectStrings(payload);
   const offending = texts.find((text) => isDeadEnd(text));
   if (!offending) return { block: false };
 
