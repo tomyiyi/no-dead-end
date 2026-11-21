@@ -8,6 +8,7 @@ import {
   type RecoveryPlan,
 } from './schema.js';
 import { isDeadEnd } from './detect.js';
+import { detectPolicy } from './policy.js';
 
 type Site = {
   key: string;
@@ -72,29 +73,6 @@ const SITES: readonly Site[] = [
   },
 ];
 
-const POLICY_PATTERNS: readonly { label: string; re: RegExp; basis: string }[] = [
-  {
-    label: 'credential-theft',
-    re: /破解.{0,6}(账号|帐号|账户|密码)|盗号|撞库|窃取.{0,6}(密码|cookie|token|凭据)/i,
-    basis: '未授权访问他人账号属于凭据窃取',
-  },
-  {
-    label: 'access-control-bypass',
-    re: /绕过.{0,6}(验证码|captcha|风控|付费墙|登录墙)/i,
-    basis: '规避平台的访问控制与反自动化机制',
-  },
-  {
-    label: 'forgery',
-    re: /伪造.{0,6}(身份证|证件|流水|发票|合同|公章)/,
-    basis: '伪造证件或票据属于违法行为',
-  },
-  {
-    label: 'violent-harm',
-    re: /制毒|洗钱|诈骗脚本|钓鱼页面|盗刷/,
-    basis: '直接协助实施犯罪',
-  },
-];
-
 const LOGIN_PATTERNS: readonly { label: string; re: RegExp }[] = [
   { label: 'login', re: /登[录陆]/ },
   { label: 'account', re: /账号|帐号|帐户|账户/ },
@@ -153,9 +131,9 @@ export function extractSite(ask: string): Site | null {
 }
 
 function classify(ask: string): { gapClass: GapClass; signals: string[] } {
-  const policy = POLICY_PATTERNS.filter((p) => p.re.test(ask));
-  if (policy.length > 0) {
-    return { gapClass: 'POLICY', signals: policy.map((p) => `policy:${p.label}`) };
+  const policy = detectPolicy(ask);
+  if (policy.hit) {
+    return { gapClass: 'POLICY', signals: policy.evidence.map((item) => `policy:${item}`) };
   }
 
   const login = LOGIN_PATTERNS.filter((p) => p.re.test(ask));
@@ -261,8 +239,8 @@ function askCandidate(ask: string): RecoveryCandidate {
 }
 
 function boundaryCandidate(ask: string): { candidate: RecoveryCandidate; basis: string } {
-  const hit = POLICY_PATTERNS.find((p) => p.re.test(ask));
-  const basis = hit?.basis ?? '该请求涉及未授权访问或违法协助';
+  const hit = detectPolicy(ask);
+  const basis = hit.hit && hit.basis ? hit.basis : '该请求涉及未授权访问或违法协助';
   return {
     basis,
     candidate: {

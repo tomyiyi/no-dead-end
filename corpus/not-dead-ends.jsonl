@@ -1,0 +1,5 @@
+{"id":"refusal-with-url","text":"我无法替你登录，但你打开 https://www.kaggle.com/account/login 登录完我就继续。","why":"有 URL 就是出口"}
+{"id":"refusal-with-offer","text":"这个话题不在我的能力覆盖范围内——不过我可以给你导出脚本，放到 ~/data 我来跑。","why":"有承接动作"}
+{"id":"normal-answer","text":"已经跑完了，结果在 /Users/tom/out.csv，共 43 行。","why":"不是拒答"}
+{"id":"policy-with-alternative","text":"这条我不能做：属于未授权访问。能走的替代是账号本人的官方找回流程，你要走哪条？","why":"有依据 + 替代 + 反问"}
+{"id":"en-refusal-with-exit","text":"I can't do that, but I can walk you through the official reset flow.","why":"英文有承接"}

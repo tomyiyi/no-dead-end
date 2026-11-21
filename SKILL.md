@@ -72,6 +72,10 @@ node <repo>/dist/src/cli.js plan --ask "那你用 kaggle 去登录，我有账�
 
 # 扫一份对话/日志里的所有死胡同
 node <repo>/dist/src/cli.js audit transcript.md --json
+
+# 装 hook：宿主支持 AfterAgent 时，命中死胡同当场打回重写（exit 2 + block）
+node <repo>/dist/src/cli.js install-hooks --dry-run
+node <repo>/dist/src/cli.js install-hooks
 ```
 
 降级开关：`--no-browser`（本机无浏览器）、`--no-network`、`--skill <name>`、`--cli <name>`、`--lang en`。

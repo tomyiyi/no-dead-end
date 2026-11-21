@@ -50,6 +50,10 @@ no-dead-end plan --ask "那你用 kaggle 去登录，我有账号的" \
 
 # 3) 扫一份对话/日志
 no-dead-end audit transcript.md --json
+
+# 4) 装 hook：把死胡同从「事后发现」变成「当场打回」
+no-dead-end install-hooks --dry-run   # 先看要写什么
+no-dead-end install-hooks             # 写进 ~/.gemini/settings.json（先备份）
 ```
 
 `plan` 选项：`--ask`（必填）、`--refusal`、`--no-browser`、`--no-network`、`--skill`、`--cli`、`--lang zh|en`、`--json`。
@@ -100,8 +104,10 @@ plan.userFacingMessage; // 直接替代那句死胡同
 
 ```bash
 npm run typecheck   # tsc --noEmit
-npm test            # build + node:test（21 条，含截图原句回归）
+npm test            # build + node:test（36 条：含截图原句、语料库双向、hook 协议）
 ```
+
+语料库在 `corpus/`：`dead-ends.jsonl` 必须全命中，`not-dead-ends.jsonl` 一个都不许误判。
 
 ## 边界
 

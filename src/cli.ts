@@ -1,7 +1,11 @@
 #!/usr/bin/env node
-import { readFileSync } from 'node:fs';
+import { copyFileSync, existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { ZodError } from 'zod';
 import { auditText, detectRefusal, findActionability, isDeadEnd } from './detect.js';
+import { evaluateHookPayload, renderHookOutput } from './hook.js';
 import { planRecovery } from './plan.js';
 import { renderAudit, renderPlan } from './render.js';
 import type { Environment } from './schema.js';
@@ -12,6 +16,8 @@ const USAGE = `no-dead-end — 把「不在我的能力范围内」死胡同改�
   no-dead-end check <文本|->            判定一段回复是不是死胡同；是则退出码 1
   no-dead-end plan --ask "用户诉求" [选项]  产出恢复计划
   no-dead-end audit <文件|-> [--json]     扫一份对话/日志，列出所有死胡同
+  no-dead-end hook                       读 stdin 的 hook 负载；命中死胡同输出 block 并退出 2
+  no-dead-end install-hooks [--dry-run]  把 hook 写进 ~/.gemini/settings.json（先备份）
 
 plan 选项：
   --ask <text>        用户原始诉求（必填）
@@ -147,6 +153,65 @@ function main(): number {
     const report = auditText(raw);
     console.log(json ? JSON.stringify(report, null, 2) : renderAudit(report));
     return report.deadEnds.length > 0 ? 1 : 0;
+  }
+
+  if (command === 'hook') {
+    const raw = readStdin().trim();
+    if (!raw) return 0;
+    let payload: unknown;
+    try {
+      payload = JSON.parse(raw);
+    } catch {
+      payload = { text: raw };
+    }
+    const decision = evaluateHookPayload(payload);
+    if (!decision.block) return 0;
+    console.log(renderHookOutput(decision, 'gemini'));
+    return 2;
+  }
+
+  if (command === 'install-hooks') {
+    const dryRun = argv.includes('--dry-run');
+    const settingsPath = join(homedir(), '.gemini', 'settings.json');
+    if (!existsSync(settingsPath)) throw new Error(`找不到 ${settingsPath}`);
+
+    const settings = JSON.parse(readFileSync(settingsPath, 'utf8')) as Record<string, unknown>;
+    const hooks = (settings['hooks'] ?? {}) as Record<string, unknown>;
+    const after = Array.isArray(hooks['AfterAgent']) ? (hooks['AfterAgent'] as unknown[]) : [];
+    const commandLine = `node ${fileURLToPath(import.meta.url)} hook`;
+
+    const already = JSON.stringify(after).includes('no-dead-end') || JSON.stringify(after).includes(commandLine);
+    if (already) {
+      console.log('hook 已存在，跳过。');
+      return 0;
+    }
+
+    const next = {
+      ...settings,
+      hooks: {
+        ...hooks,
+        AfterAgent: [
+          ...after,
+          { matcher: '*', hooks: [{ type: 'command', command: commandLine }] },
+        ],
+      },
+    };
+
+    if (dryRun) {
+      console.log(JSON.stringify(next['hooks'], null, 2));
+      console.log('\n--dry-run：没有写入。');
+      return 0;
+    }
+
+    const backup = `${settingsPath}.bak-${new Date().toISOString().slice(0, 19).replace(/[-:]/g, '')}`;
+    copyFileSync(settingsPath, backup);
+    const tmp = `${settingsPath}.tmp-${process.pid}`;
+    writeFileSync(tmp, `${JSON.stringify(next, null, 2)}\n`, 'utf8');
+    JSON.parse(readFileSync(tmp, 'utf8'));
+    renameSync(tmp, settingsPath);
+    console.log(`已写入 AfterAgent hook：${settingsPath}`);
+    console.log(`备份：${backup}`);
+    return 0;
   }
 
   console.error(`未知命令：${command}\n`);
