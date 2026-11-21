@@ -1,0 +1,44 @@
+{
+  "name": "no-dead-end",
+  "version": "1.0.0",
+  "description": "把 AI 的「不在我的能力覆盖范围内」死胡同，重写成可执行的恢复路径。Zod 强校验，可回归测试，兼容 WorkBuddy / Claude Skills。",
+  "type": "module",
+  "bin": {
+    "no-dead-end": "./dist/src/cli.js"
+  },
+  "files": [
+    "dist/src",
+    "SKILL.md",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "build": "tsc",
+    "test": "npm run build && node --test dist/test/*.test.js",
+    "prepublishOnly": "npm run typecheck && npm test"
+  },
+  "keywords": [
+    "agent",
+    "skill",
+    "refusal",
+    "capability-gap",
+    "recovery",
+    "browser-handover",
+    "workbuddy",
+    "claude-skills",
+    "zod",
+    "typescript"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "typescript": "^5.7.0"
+  }
+}
