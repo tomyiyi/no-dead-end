@@ -78,9 +78,10 @@ export function readTranscriptReplies(payload: unknown): string[] {
 }
 
 export function evaluateHookPayload(payload: unknown): HookDecision {
-  // Antigravity 的 Stop 负载不带回复正文，只给 transcriptPath；优先从会话记录里取助手最后几条输出。
+  // Antigravity 的 Stop 负载不带回复正文，只给 transcriptPath；只看最新一条助手输出。
+  // 若把前几轮也扫进去，被拦下的旧回复会一直留在 transcript 里，导致无限 block（实测）。
   const replyTexts = readTranscriptReplies(payload);
-  const texts = replyTexts.length > 0 ? replyTexts : collectStrings(payload);
+  const texts = replyTexts.length > 0 ? [replyTexts[0] as string] : collectStrings(payload);
   const offending = texts.find((text) => isDeadEnd(text));
   if (!offending) return { block: false };
 
@@ -95,10 +96,11 @@ export function evaluateHookPayload(payload: unknown): HookDecision {
   };
 }
 
-export function renderHookOutput(decision: HookDecision, host: 'gemini' | 'claude'): string {
+export function renderHookOutput(decision: HookDecision, host: 'gemini' | 'claude' | 'antigravity'): string {
   if (!decision.block) return '';
-  if (host === 'claude') {
-    // Claude Code: decision=block 会把 reason 回灌给模型，要求它继续
+  if (host === 'claude' || host === 'antigravity') {
+    // Claude Code / Antigravity（agy）: 退出码 0 + decision=block 才会真正续跑；
+    // 退出码 2 会被当成 hook 执行出错，直接放行停止（实测）。
     return JSON.stringify({ decision: 'block', reason: `${decision.reason}\n${decision.nextAction ?? ''}` }, null, 2);
   }
   // Gemini CLI: systemMessage 回灌 + exit 2

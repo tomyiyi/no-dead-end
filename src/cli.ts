@@ -158,6 +158,9 @@ function main(): number {
   if (command === 'hook') {
     const raw = readStdin().trim();
     if (!raw) return 0;
+    const hostIndex = argv.indexOf('--host');
+    const host = hostIndex >= 0 ? argv[hostIndex + 1] : 'gemini';
+    const isAntigravity = host === 'antigravity';
     let payload: unknown;
     try {
       payload = JSON.parse(raw);
@@ -166,19 +169,22 @@ function main(): number {
     }
     const decision = evaluateHookPayload(payload);
     if (!decision.block) return 0;
-    console.log(renderHookOutput(decision, 'gemini'));
-    return 2;
+    console.log(renderHookOutput(decision, isAntigravity ? 'antigravity' : 'gemini'));
+    // agy 把非 0 退出码当作 hook 故障并放行，所以必须用 0 + decision=block
+    return isAntigravity ? 0 : 2;
   }
 
   if (command === 'install-hooks') {
     const dryRun = argv.includes('--dry-run');
     const hostIndex = argv.indexOf('--host');
     const host = hostIndex >= 0 ? argv[hostIndex + 1] : 'antigravity';
-    const commandLine = `node ${fileURLToPath(import.meta.url)} hook`;
 
     // Antigravity（agy）= PreToolUse / PostToolUse / Stop，配置在 ~/.gemini/config/hooks.json
     // Gemini CLI = settings.json 里的 hooks.AfterAgent
     const isAntigravity = host !== 'gemini';
+    const commandLine = isAntigravity
+      ? `node ${fileURLToPath(import.meta.url)} hook --host antigravity`
+      : `node ${fileURLToPath(import.meta.url)} hook`;
     const file = isAntigravity
       ? join(homedir(), '.gemini', 'config', 'hooks.json')
       : join(homedir(), '.gemini', 'settings.json');

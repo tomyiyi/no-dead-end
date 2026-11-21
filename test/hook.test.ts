@@ -55,6 +55,18 @@ test('hook CLI：命中时退出码 2', () => {
   assert.match(result.stdout, /"decision": "block"/);
 });
 
+test('hook CLI：antigravity 模式必须 0 + decision=block（非 0 会被当故障放行）', () => {
+  const payload = JSON.stringify({
+    llm_response: '这个话题目前不在我的能力覆盖范围内，我没有办法就此展开讨论。',
+  });
+  const result = spawnSync(process.execPath, [cli, 'hook', '--host', 'antigravity'], {
+    input: payload,
+    encoding: 'utf8',
+  });
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /"decision": "block"/);
+});
+
 test('hook CLI：空输入不打扰，退出码 0', () => {
   const result = spawnSync(process.execPath, [cli, 'hook'], { input: '', encoding: 'utf8' });
   assert.equal(result.status, 0);
@@ -82,6 +94,15 @@ test('Antigravity 负载：从 transcriptPath 抓到助手最后一条死胡同'
   const decision = evaluateHookPayload({ hookEventName: 'Stop', transcriptPath: transcript });
   assert.equal(decision.block, true);
   assert.match(decision.offending ?? '', /无法就此展开讨论/);
+});
+
+test('Antigravity 负载：只看最新一条，旧的那条被拦过就不再重复 block', () => {
+  const transcript = writeTranscript([
+    { source: 'MODEL', content: '我无法就此展开讨论。' },
+    { source: 'MODEL', content: '我不能替你登录，你打开 https://www.kaggle.com/account/login 登录完我继续跑。' },
+  ]);
+  const decision = evaluateHookPayload({ hookEventName: 'Stop', transcriptPath: transcript });
+  assert.equal(decision.block, false, '旧回复不能导致无限 block');
 });
 
 test('Antigravity 负载：transcript 里最后一条有出口就放行', () => {
